@@ -270,7 +270,7 @@
     Lift Audit <span class="ver">/ CRO · V2</span>
   </div>
   <div class="head-right">
-    <span class="dot-tag"><i></i>Self-hosted</span>
+    <span class="dot-tag"><i></i>All systems normal</span>
     <button id="user-chip" title="Account settings"></button>
   </div>
 </header>
@@ -406,13 +406,14 @@
   <div class="modal" id="modal-box"></div>
 </div>
 
-<footer><span>Lift Audit / self-hosted CRO</span><span>Netlify + Supabase</span></footer>
+<footer><span id="footer-copyright">© Lift Audit</span><span>Privacy · Terms · Support</span></footer>
 
 <script src="/config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/snippets.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
+document.getElementById("footer-copyright").textContent = `© ${new Date().getFullYear()} Lift Audit. All rights reserved.`;
 const sb = supabase.createClient(window.LIFT_CONFIG.SUPABASE_URL, window.LIFT_CONFIG.SUPABASE_ANON_KEY);
 let currentUser = null, authMode = "signin", selectedType = "auto";
 let lastReport = null, progressTimer = null, pollTimer = null;
@@ -439,7 +440,7 @@ document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay.
 /* ================= AUTH LAYER ================= */
 const MODES = {
   signin:  { sect:"Access",   title:"Sign in",             lead:"Run audits and review your history.",                       submit:"Sign in",           pw:true,  toggle:"Create an account",       forgot:true,  magic:true  },
-  signup:  { sect:"Access",   title:"Create your account", lead:"Accounts and reports live in your own Supabase project.",   submit:"Create account",    pw:true,  toggle:"Have an account? Sign in", forgot:false, magic:false },
+  signup:  { sect:"Access",   title:"Create your account", lead:"Your account, your audits — private to you.",   submit:"Create account",    pw:true,  toggle:"Have an account? Sign in", forgot:false, magic:false },
   forgot:  { sect:"Recovery", title:"Reset your password", lead:"We'll email you a secure link to set a new password.",      submit:"Send reset link",   pw:false, toggle:"Back to sign in",          forgot:false, magic:false },
   recovery:{ sect:"Recovery", title:"Set a new password",  lead:"You followed a reset link — choose your new password.",     submit:"Update password",   pw:true,  toggle:null,                       forgot:false, magic:false },
 };
@@ -707,10 +708,10 @@ function pollReport(id) {
   return new Promise((resolve) => {
     const started = Date.now();
     pollTimer = setInterval(async () => {
-      if (Date.now() - started > 5 * 60 * 1000) {
+      if (Date.now() - started > 5.5 * 60 * 1000) {
         stopPoll(); stopProgress();
         $("#progress").style.display = "none";
-        showError("The audit timed out. Very heavy pages can exceed the function budget — try again or check the Netlify function logs.");
+        showError("This is taking longer than expected. The audit may still finish in the background — check your history in a minute, or try again.");
         finishAuditUi(); resolve();
         return;
       }

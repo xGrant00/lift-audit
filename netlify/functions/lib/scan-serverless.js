@@ -11,6 +11,18 @@ const MOBILE = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, 
 const MOBILE_UA =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
 const MAX_SHOT_HEIGHT = 8000; // px — cap full-page capture
+const NAV_TIMEOUT = 35000; // ms — per-viewport page load ceiling
+const STEP_TIMEOUT = 20000; // ms — per-viewport evaluate/screenshot ceiling
+const VIEWPORT_TIMEOUT = 60000; // ms — hard ceiling for one whole viewport pass
+const SCAN_TIMEOUT = 100000; // ms — hard ceiling for the whole browser scan (both viewports)
+
+function withTimeout(promise, ms, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} took too long (>${Math.round(ms / 1000)}s)`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 // Runs inside the page. Must be self-contained (it is serialized into the browser).
 function extractInPage(viewportLabel) {
@@ -209,33 +221,56 @@ async function scanViewport(browser, url, viewport, label, ua) {
     });
 
     const started = Date.now();
-    const response = await page.goto(url, { waitUntil: "networkidle2", timeout: 60000 });
+    // Some pages (chat widgets, live tickers, analytics beacons) never go fully
+    // idle. Give networkidle2 a shorter, hard ceiling — if it times out but we
+    // still landed on a real page, keep going with what rendered instead of
+    // treating it as a fatal error.
+    let response;
+    try {
+      response = await page.goto(url, { waitUntil: "networkidle2", timeout: NAV_TIMEOUT });
+    } catch (navErr) {
+      if (!page.url() || page.url() === "about:blank") throw navErr;
+    }
     const loadMs = Date.now() - started;
-    await new Promise((r) => setTimeout(r, 1200));
+    await new Promise((r) => setTimeout(r, 800));
 
-    const perf = await page.evaluate(() => {
-      const nav = performance.getEntriesByType("navigation")[0];
-      const lcp = performance.getEntriesByType("largest-contentful-paint").pop();
-      return {
-        domContentLoaded: nav ? Math.round(nav.domContentLoadedEventEnd) : null,
-        transferSize: nav ? nav.transferSize : null,
-        lcp: lcp ? Math.round(lcp.renderTime || lcp.loadTime) : null,
-      };
-    });
+    const perf = await withTimeout(
+      page.evaluate(() => {
+        const nav = performance.getEntriesByType("navigation")[0];
+        const lcp = performance.getEntriesByType("largest-contentful-paint").pop();
+        return {
+          domContentLoaded: nav ? Math.round(nav.domContentLoadedEventEnd) : null,
+          transferSize: nav ? nav.transferSize : null,
+          lcp: lcp ? Math.round(lcp.renderTime || lcp.loadTime) : null,
+        };
+      }),
+      STEP_TIMEOUT,
+      `${label} perf read`
+    ).catch(() => ({ domContentLoaded: null, transferSize: null, lcp: null }));
 
-    const data = await page.evaluate(extractInPage, label);
+    const data = await withTimeout(page.evaluate(extractInPage, label), STEP_TIMEOUT, `${label} content extraction`);
 
     // Cap capture height to protect Lambda memory
-    const fullHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+    const fullHeight = await withTimeout(
+      page.evaluate(() => document.documentElement.scrollHeight),
+      STEP_TIMEOUT,
+      `${label} height read`
+    ).catch(() => viewport.height);
     const shotHeight = Math.min(fullHeight, MAX_SHOT_HEIGHT);
-    const screenshot = await page.screenshot({
-      type: "jpeg",
-      quality: 60,
-      clip: { x: 0, y: 0, width: viewport.width, height: shotHeight },
-      captureBeyondViewport: true,
-    });
+    const screenshot = await withTimeout(
+      page.screenshot({
+        type: "jpeg",
+        quality: 60,
+        clip: { x: 0, y: 0, width: viewport.width, height: shotHeight },
+        captureBeyondViewport: true,
+      }),
+      STEP_TIMEOUT,
+      `${label} full screenshot`
+    ).catch(() => null);
     // Small above-the-fold capture (base64) for the optional AI review
-    const foldShot = await page.screenshot({ type: "jpeg", quality: 70 });
+    const foldShot = await withTimeout(page.screenshot({ type: "jpeg", quality: 70 }), STEP_TIMEOUT, `${label} fold screenshot`).catch(
+      () => null
+    );
 
     return {
       ...data,
@@ -246,8 +281,8 @@ async function scanViewport(browser, url, viewport, label, ua) {
       requestCount: requests.count,
       pageBytes: requests.bytes,
       perf,
-      screenshotFull: screenshot, // Buffer — uploaded to storage by the function
-      screenshotFold: foldShot.toString("base64"),
+      screenshotFull: screenshot, // Buffer — uploaded to storage by the function (null if capture failed)
+      screenshotFold: foldShot ? foldShot.toString("base64") : null,
     };
   } finally {
     await page.close().catch(() => {});
@@ -255,15 +290,28 @@ async function scanViewport(browser, url, viewport, label, ua) {
 }
 
 export async function scanWithBrowser(url) {
-  const browser = await puppeteer.launch({
-    args: [...chromium.args, "--disable-dev-shm-usage"],
-    defaultViewport: null,
-    executablePath: await chromium.executablePath(),
-    headless: chromium.headless,
-  });
+  const browser = await withTimeout(
+    puppeteer.launch({
+      args: [...chromium.args, "--disable-dev-shm-usage"],
+      defaultViewport: null,
+      executablePath: await chromium.executablePath(),
+      headless: chromium.headless,
+    }),
+    30000,
+    "Browser launch"
+  );
   try {
-    const desktop = await scanViewport(browser, url, DESKTOP, "desktop");
-    const mobile = await scanViewport(browser, url, MOBILE, "mobile", MOBILE_UA);
+    // Desktop and mobile passes are independent — run them side by side so a
+    // heavy page costs one wait instead of two, and give the pair a hard
+    // ceiling so a stuck viewport can't consume the whole function budget.
+    const [desktop, mobile] = await withTimeout(
+      Promise.all([
+        withTimeout(scanViewport(browser, url, DESKTOP, "desktop"), VIEWPORT_TIMEOUT, "Desktop scan"),
+        withTimeout(scanViewport(browser, url, MOBILE, "mobile", MOBILE_UA), VIEWPORT_TIMEOUT, "Mobile scan"),
+      ]),
+      SCAN_TIMEOUT,
+      "Browser scan"
+    );
     return { mode: "browser", desktop, mobile };
   } finally {
     await browser.close().catch(() => {});
