@@ -80,7 +80,7 @@
 
   /* ============ hero ============ */
   #app{display:none}
-  .hero{max-width:880px;margin:0 auto;padding:72px 24px 26px;text-align:center;position:relative}
+  .hero{max-width:880px;margin:0 auto;padding:24px;text-align:center;position:relative;min-height:calc(100vh - 58px);display:flex;flex-direction:column;justify-content:center}
   .hero .sect{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--steel);margin-bottom:16px}
   .hero h1{font-size:clamp(34px,5.6vw,56px);font-weight:600;letter-spacing:-.03em;line-height:1.06}
   .hero h1 em{font-style:normal;color:var(--fog)}
@@ -259,6 +259,12 @@
   .btn-blue:disabled{background:var(--carbon2);color:var(--steel)}
 
   footer{border-top:1px solid var(--line);padding:22px 28px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel)}
+
+  /* ============ bottom-right 24h clock ============ */
+  #clock{position:fixed;right:20px;bottom:16px;z-index:40;font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.14em;color:var(--fog);background:rgba(18,18,21,.82);border:1px solid var(--line);border-radius:8px;padding:6px 12px;backdrop-filter:blur(8px);font-variant-numeric:tabular-nums;pointer-events:none;user-select:none}
+  #clock i{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--teal);margin-right:8px;vertical-align:1px;animation:clock-pulse 2s ease-in-out infinite}
+  @keyframes clock-pulse{0%,100%{opacity:1}50%{opacity:.35}}
+  @media(max-width:640px){#clock{display:none}}
   @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 </style>
 </head>
@@ -408,12 +414,26 @@
 
 <footer><span id="footer-copyright">© Lift Audit</span><span>Privacy · Terms · Support</span></footer>
 
+<div id="clock" aria-hidden="true"><i></i><span id="clock-time">00:00:00</span></div>
+
 <script src="/config.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="/snippets.js"></script>
 <script>
 const $ = (s) => document.querySelector(s);
 document.getElementById("footer-copyright").textContent = `© ${new Date().getFullYear()} Lift Audit. All rights reserved.`;
+
+/* ================= 24H CLOCK ================= */
+(function clock(){
+  const el = document.getElementById("clock-time");
+  const two = (n) => String(n).padStart(2, "0");
+  function tick(){
+    const d = new Date();
+    el.textContent = `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+    setTimeout(tick, 1000 - d.getMilliseconds()); // stay aligned to real seconds
+  }
+  tick();
+})();
 const sb = supabase.createClient(window.LIFT_CONFIG.SUPABASE_URL, window.LIFT_CONFIG.SUPABASE_ANON_KEY);
 let currentUser = null, authMode = "signin", selectedType = "auto";
 let lastReport = null, progressTimer = null, pollTimer = null;
