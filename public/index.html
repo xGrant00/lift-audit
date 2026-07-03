@@ -1,0 +1,1021 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lift Audit — conversion audits with depth</title>
+<meta name="color-scheme" content="dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230A0A0B'/><rect x='8' y='8' width='16' height='16' rx='2' fill='none' stroke='%23FAFAF7' stroke-width='2'/><circle cx='16' cy='16' r='3' fill='%232F6BFF'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ============ Flatland-style system: mono base, functional accents ============ */
+  :root{
+    --ink:#0A0A0B;        /* base */
+    --carbon:#121215;     /* surface */
+    --carbon2:rgba(154,154,162,.08); /* raised surface — fog @ 8% */
+    --steel:#5A5A62;      /* muted */
+    --fog:#9A9AA2;        /* secondary text */
+    --paper:#FAFAF7;      /* type base */
+    --line:rgba(154,154,162,.16);        /* fog @ 16% hairline */
+    --line-strong:rgba(154,154,162,.32);
+    --blue:#2F6BFF;   --blue-dim:rgba(47,107,255,.13);   /* primary & interactive */
+    --violet:#8B5CF6; --violet-dim:rgba(139,92,246,.13); /* intelligence */
+    --teal:#14B8A6;   --teal-dim:rgba(20,184,166,.13);   /* active / pass */
+    --amber:#F59E0B;  --amber-dim:rgba(245,158,11,.13);  /* caution / warn */
+    --rose:#F43F5E;   --rose-dim:rgba(244,63,94,.13);    /* error / fail */
+    --sans:"Geist",system-ui,sans-serif;
+    --mono:"Geist Mono",ui-monospace,monospace;
+  }
+  *{box-sizing:border-box;margin:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--ink);color:var(--paper);font-family:var(--sans);font-size:16px;line-height:1.6;font-weight:400;-webkit-font-smoothing:antialiased}
+  ::selection{background:var(--blue);color:var(--paper)}
+  button{font:inherit;cursor:pointer;color:inherit}
+  code{font-family:var(--mono);font-size:.86em;background:var(--carbon2);border:1px solid var(--line);padding:1px 6px;border-radius:6px}
+  :focus-visible{outline:2px solid var(--blue);outline-offset:2px;border-radius:6px}
+  .mono{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--steel)}
+  .linkish{background:none;border:0;color:var(--fog);font-weight:500;font-size:13px;padding:0}
+  .linkish:hover{color:var(--paper)}
+  .link-blue{background:none;border:0;color:var(--blue);font-weight:500;font-size:13px;padding:0}
+  .link-blue:hover{text-decoration:underline;text-underline-offset:3px}
+
+  /* ============ header ============ */
+  header{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 28px;border-bottom:1px solid var(--line);position:sticky;top:0;background:rgba(10,10,11,.86);backdrop-filter:blur(12px);z-index:50}
+  .wordmark{display:flex;align-items:center;gap:11px;font-weight:600;font-size:16px;letter-spacing:-.01em}
+  .wordmark .tile{width:26px;height:26px;border-radius:7px;background:var(--carbon);border:1px solid var(--line-strong);display:grid;place-items:center;flex:none}
+  .wordmark .tile span{width:8px;height:8px;border-radius:2px;background:var(--blue)}
+  .wordmark .ver{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.12em;color:var(--steel);margin-left:2px;padding-top:3px}
+  .head-right{display:flex;align-items:center;gap:16px;font-size:13px;color:var(--fog)}
+  .head-right .dot-tag{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--fog);border:1px solid var(--line);border-radius:999px;padding:5px 12px;background:var(--carbon)}
+  .head-right .dot-tag i{width:6px;height:6px;border-radius:50%;background:var(--teal);display:inline-block}
+  #user-chip{background:none;border:0;color:var(--fog);font-size:13px;font-weight:500;display:none;align-items:center;gap:7px}
+  #user-chip:hover{color:var(--paper)}
+  @media(max-width:640px){.head-right .dot-tag{display:none}}
+
+  /* ============ auth ============ */
+  .auth-wrap{min-height:calc(100vh - 58px);display:grid;place-items:center;padding:32px 20px;position:relative}
+  .auth-grid-bg{position:absolute;inset:0;background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:56px 56px;mask-image:radial-gradient(ellipse 70% 55% at 50% 42%,black 30%,transparent 75%);pointer-events:none;opacity:.5}
+  .auth-card{position:relative;width:100%;max-width:400px;background:var(--carbon);border:1px solid var(--line);border-radius:16px;padding:32px}
+  .auth-card .sect{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);display:flex;align-items:center;gap:8px;margin-bottom:14px}
+  .auth-card .sect i{width:6px;height:6px;border-radius:50%;background:var(--blue)}
+  .auth-card h1{font-size:23px;font-weight:600;letter-spacing:-.02em;line-height:1.15;margin-bottom:6px}
+  .auth-card .lead{font-size:13.5px;color:var(--fog);margin-bottom:22px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--steel);margin-bottom:7px}
+  .field input{width:100%;border:1px solid var(--line);border-radius:9px;background:var(--ink);padding:11px 13px;font:400 14.5px var(--sans);color:var(--paper);transition:border-color .12s}
+  .field input:focus{outline:none;border-color:var(--blue)}
+  .field input::placeholder{color:var(--steel)}
+  .btn-primary{width:100%;border:0;background:var(--blue);color:var(--paper);border-radius:9px;padding:12px;font-weight:600;font-size:14.5px;transition:filter .12s}
+  .btn-primary:hover{filter:brightness(1.12)}
+  .btn-primary:disabled{background:var(--carbon2);color:var(--steel);cursor:wait}
+  .btn-paper{width:100%;border:1px solid var(--line-strong);background:var(--paper);color:var(--ink);border-radius:9px;padding:12px;font-weight:600;font-size:14.5px}
+  .btn-paper:hover{background:#fff}
+  .auth-links{display:flex;justify-content:space-between;gap:10px;margin-top:14px;font-size:13px}
+  .auth-alt{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+  .notice{display:none;border-radius:9px;padding:10px 12px;font-size:13px;margin-bottom:16px;border:1px solid}
+  .notice.err{background:var(--rose-dim);border-color:var(--rose);color:var(--paper)}
+  .notice.ok{background:var(--teal-dim);border-color:var(--teal);color:var(--paper)}
+
+  /* ============ hero ============ */
+  #app{display:none}
+  .hero{max-width:880px;margin:0 auto;padding:72px 24px 26px;text-align:center;position:relative}
+  .hero .sect{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--steel);margin-bottom:16px}
+  .hero h1{font-size:clamp(34px,5.6vw,56px);font-weight:600;letter-spacing:-.03em;line-height:1.06}
+  .hero h1 em{font-style:normal;color:var(--fog)}
+  .hero p.sub{margin:16px auto 0;max-width:520px;color:var(--fog);font-size:16px}
+  .omnibox{margin:34px auto 0;max-width:640px;display:flex;background:var(--carbon);border:1px solid var(--line);border-radius:12px;overflow:hidden;transition:border-color .15s,box-shadow .15s}
+  .omnibox:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px var(--blue-dim)}
+  .omnibox input{flex:1;min-width:0;border:0;background:transparent;padding:16px 18px;font:400 16px var(--sans);color:var(--paper)}
+  .omnibox input:focus{outline:none}
+  .omnibox input::placeholder{color:var(--steel)}
+  .omnibox button{border:0;background:var(--blue);color:var(--paper);font-weight:600;font-size:14.5px;padding:0 26px;transition:filter .12s;white-space:nowrap}
+  .omnibox button:hover{filter:brightness(1.12)}
+  .omnibox button:disabled{background:var(--carbon2);color:var(--steel);cursor:wait}
+  @media(max-width:520px){
+    .omnibox{flex-direction:column}
+    .omnibox input{padding:15px 16px;border-bottom:1px solid var(--line)}
+    .omnibox button{padding:14px}
+  }
+  .type-row{margin:18px auto 0;max-width:640px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center}
+  .type-row .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--steel);margin-right:4px}
+  .type-chip{border:1px solid var(--line);background:var(--carbon);border-radius:999px;padding:6px 15px;font-size:13px;font-weight:500;color:var(--fog);transition:all .12s}
+  .type-chip:hover{border-color:var(--line-strong);color:var(--paper)}
+  .type-chip[aria-pressed="true"]{background:var(--paper);border-color:var(--paper);color:var(--ink)}
+  .hint{margin-top:14px;font-size:13px;color:var(--steel);text-align:center}
+  .error{margin:16px auto 0;max-width:640px;display:none;background:var(--rose-dim);border:1px solid var(--rose);border-radius:10px;padding:12px 16px;font-size:14px;text-align:left}
+
+  /* ============ progress ============ */
+  .progress{max-width:640px;margin:8px auto 60px;padding:0 24px;display:none}
+  .progress ol{list-style:none;padding:0;text-align:left}
+  .progress li{display:flex;align-items:center;gap:12px;padding:11px 4px;color:var(--steel);font-size:14.5px;border-bottom:1px solid var(--line);opacity:.4;transition:opacity .3s}
+  .progress li.active{opacity:1;color:var(--paper);font-weight:500}
+  .progress li.done{opacity:1;color:var(--fog)}
+  .progress li .dot{width:18px;height:18px;border-radius:50%;border:1.5px solid var(--line-strong);display:grid;place-items:center;flex:none;font-size:10px;color:var(--teal)}
+  .progress li.active .dot{border-color:var(--blue);animation:pulse 1.2s infinite}
+  .progress li.done .dot{border-color:var(--teal);background:var(--teal-dim)}
+  @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+
+  /* ============ history ============ */
+  .history{max-width:880px;margin:36px auto 70px;padding:0 24px}
+  .history h3{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);padding-bottom:10px;border-bottom:1px solid var(--line)}
+  .hist-row{display:flex;align-items:stretch}
+  .hist-item{display:flex;align-items:center;gap:14px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:13px 8px;font-size:14px;transition:background .12s}
+  .hist-item:hover{background:var(--carbon)}
+  .hist-score{font-family:var(--mono);font-weight:500;font-size:15px;width:34px;text-align:right;flex:none}
+  .hist-score.good{color:var(--teal)} .hist-score.mid{color:var(--amber)} .hist-score.bad{color:var(--rose)}
+  .hist-url{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+  .hist-meta{color:var(--steel);font-size:12px;flex:none;font-family:var(--mono)}
+  @media(max-width:560px){.hist-meta{display:none}}
+  .hist-del{flex:none;background:none;border:0;border-bottom:1px solid var(--line);color:var(--steel);font-size:14px;padding:4px 12px}
+  .hist-del:hover{color:var(--rose);background:var(--rose-dim)}
+  .hist-empty{color:var(--steel);font-size:14px;padding:14px 4px}
+
+  /* ============ results ============ */
+  .results{display:none;max-width:1240px;margin:0 auto;padding:24px 24px 110px}
+  .report-head{display:flex;flex-wrap:wrap;align-items:flex-end;gap:14px 24px;border-bottom:1px solid var(--line-strong);padding-bottom:18px;margin-bottom:30px}
+  .report-head .sect{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--steel);display:block;margin-bottom:8px}
+  .report-head h2{font-size:clamp(21px,3vw,29px);font-weight:600;letter-spacing:-.02em;line-height:1.1;word-break:break-all}
+  .type-badge{display:inline-flex;align-items:center;gap:7px;vertical-align:middle;margin-left:12px;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--blue);background:var(--blue-dim);border:1px solid rgba(47,107,255,.35);border-radius:999px;padding:4px 11px;transform:translateY(-3px)}
+  .type-badge i{width:5px;height:5px;border-radius:50%;background:var(--blue)}
+  .report-head .meta{margin-left:auto;text-align:right;font-size:12px;color:var(--steel);font-family:var(--mono)}
+  .report-head .meta b{color:var(--fog);font-weight:500}
+  @media(max-width:700px){.report-head .meta{margin-left:0;text-align:left}}
+
+  .grid{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:36px;align-items:start}
+  @media(max-width:940px){.grid{grid-template-columns:1fr}}
+  .shot-panel{position:sticky;top:82px}
+  @media(max-width:940px){.shot-panel{position:static}}
+  .device-toggle{display:flex;gap:8px;margin-bottom:14px}
+  .device-toggle button{border:1px solid var(--line);background:var(--carbon);border-radius:999px;padding:6px 17px;font-weight:500;font-size:13px;color:var(--fog)}
+  .device-toggle button[aria-pressed="true"]{background:var(--paper);border-color:var(--paper);color:var(--ink)}
+  .shot-frame{border:1px solid var(--line);border-radius:12px;background:var(--carbon);padding:10px}
+  .shot-scroll{max-height:70vh;overflow:auto;border:1px solid var(--line);background:var(--ink);border-radius:6px}
+  .shot-scroll img{display:block;width:100%;height:auto}
+  .shot-none{border:1px dashed var(--line-strong);border-radius:8px;padding:36px 24px;color:var(--steel);text-align:center;font-size:14px}
+  .shot-label{margin-top:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--steel);text-align:center}
+
+  .score-row{display:flex;gap:26px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+  .score-circle{position:relative;width:140px;height:140px;flex:none}
+  .score-circle svg{position:absolute;inset:0;transform:rotate(-90deg)}
+  .score-circle .num{position:absolute;inset:0;display:grid;place-items:center;font-weight:600;font-size:44px;letter-spacing:-.03em}
+  .score-circle .num small{font-family:var(--mono);font-size:11px;font-weight:500;color:var(--steel);margin-top:30px;margin-left:5px;letter-spacing:.08em}
+  .score-note{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+  .score-note i{width:6px;height:6px;border-radius:50%;display:inline-block}
+  .verdict{font-size:14.5px;color:var(--fog);max-width:440px}
+  .verdict b{color:var(--paper);font-weight:600}
+
+  .cats{margin:26px 0 34px;display:grid;gap:11px}
+  .cat{display:grid;grid-template-columns:172px 1fr 40px;gap:14px;align-items:center;font-size:13.5px}
+  @media(max-width:520px){.cat{grid-template-columns:118px 1fr 34px}}
+  .cat .name{font-weight:500;color:var(--fog)}
+  .cat .bar{height:6px;background:var(--carbon2);border-radius:99px;overflow:hidden}
+  .cat .bar i{display:block;height:100%;border-radius:99px;background:var(--teal);transition:width .8s cubic-bezier(.2,.7,.2,1)}
+  .cat.mid .bar i{background:var(--amber)}
+  .cat.low .bar i{background:var(--rose)}
+  .cat .val{font-family:var(--mono);font-weight:500;text-align:right;font-size:12.5px}
+
+  .ai-notes{border:1px solid rgba(139,92,246,.3);border-radius:14px;background:var(--carbon);padding:22px 24px;margin-bottom:34px;position:relative;overflow:hidden}
+  .ai-notes::before{content:"";position:absolute;inset:0 auto 0 0;width:3px;background:var(--violet)}
+  .ai-notes h3{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--violet);display:flex;align-items:center;gap:9px;margin-bottom:10px}
+  .ai-notes h3 i{width:6px;height:6px;border-radius:50%;background:var(--violet)}
+  .ai-notes .ai-verdict{font-size:16px;font-weight:500;color:var(--paper);margin-bottom:16px;letter-spacing:-.01em}
+  .ai-notes ol{padding:0;list-style:none;display:grid;gap:12px}
+  .ai-notes li{display:flex;gap:14px;font-size:14px;color:var(--fog)}
+  .ai-notes li b{display:block;margin-bottom:2px;color:var(--paper);font-weight:600}
+  .ai-notes li .n{flex:none;width:24px;height:24px;border:1px solid rgba(139,92,246,.45);background:var(--violet-dim);border-radius:7px;display:grid;place-items:center;font-family:var(--mono);font-weight:500;font-size:11px;color:var(--violet)}
+
+  .findings-head{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:16px}
+  .findings-head h3{font-size:17px;font-weight:600;letter-spacing:-.01em}
+  .tally{font-family:var(--mono);font-size:11px;letter-spacing:.06em;color:var(--steel)}
+  .tally .f{color:var(--rose)} .tally .w{color:var(--amber)} .tally .p{color:var(--teal)}
+  .copy-btn{margin-left:auto;border:1px solid var(--line);background:var(--carbon);border-radius:8px;padding:7px 14px;font-weight:500;font-size:13px;color:var(--paper)}
+  .copy-btn:hover{border-color:var(--line-strong)}
+
+  .finding{border:1px solid var(--line);background:var(--carbon);border-radius:12px;padding:15px 17px;margin-bottom:10px;opacity:0;transform:translateY(8px);animation:rise .4s forwards}
+  @keyframes rise{to{opacity:1;transform:none}}
+  .finding .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .status{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;padding:3px 10px;border-radius:999px;border:1px solid}
+  .status i{width:5px;height:5px;border-radius:50%;display:inline-block}
+  .status.fail{background:var(--rose-dim);color:var(--rose);border-color:rgba(244,63,94,.35)} .status.fail i{background:var(--rose)}
+  .status.warn{background:var(--amber-dim);color:var(--amber);border-color:rgba(245,158,11,.35)} .status.warn i{background:var(--amber)}
+  .status.pass{background:var(--teal-dim);color:var(--teal);border-color:rgba(20,184,166,.35)} .status.pass i{background:var(--teal)}
+  .finding .title{font-weight:600;font-size:15px;letter-spacing:-.01em}
+  .finding .cat-tag{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);margin-left:auto}
+  .finding .detail{margin-top:6px;font-size:13.5px;color:var(--fog)}
+  .finding .actions{margin-top:10px;display:flex;gap:18px}
+  .fix-first{font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .fix-first i{width:6px;height:6px;border-radius:50%;background:var(--blue)}
+
+  /* ============ fix kit strip ============ */
+  .fixkit{margin-top:46px}
+  .fixkit h3{font-size:17px;font-weight:600;border-bottom:1px solid var(--line);padding-bottom:10px;letter-spacing:-.01em}
+  .fixkit p.blurb{font-size:13.5px;color:var(--fog);margin:10px 0 16px;max-width:620px}
+  .kit-chips{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+  .kit-chip{border:1px solid var(--line);background:var(--carbon);border-radius:12px;padding:14px 16px;text-align:left;transition:border-color .12s}
+  .kit-chip:hover{border-color:var(--blue)}
+  .kit-chip b{display:block;font-size:14px;font-weight:600}
+  .kit-chip span{font-family:var(--mono);font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--steel)}
+
+  /* ============ modals ============ */
+  .modal-overlay{position:fixed;inset:0;background:rgba(10,10,11,.78);backdrop-filter:blur(6px);z-index:100;display:none;align-items:flex-start;justify-content:center;overflow-y:auto;padding:5vh 16px 6vh}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--carbon);border:1px solid var(--line-strong);border-radius:16px;max-width:940px;width:100%;animation:modal-in .2s cubic-bezier(.2,.9,.3,1.15)}
+  .modal.narrow{max-width:440px}
+  @keyframes modal-in{from{opacity:0;transform:translateY(12px) scale(.985)}to{opacity:1;transform:none}}
+  .modal-head{display:flex;align-items:flex-start;gap:12px;padding:20px 22px 0}
+  .modal-head h3{font-size:17px;font-weight:600;letter-spacing:-.01em;line-height:1.2;flex:1;padding-top:3px}
+  .modal-close{background:none;border:1px solid var(--line);border-radius:8px;color:var(--steel);width:32px;height:32px;font-size:14px;flex:none}
+  .modal-close:hover{color:var(--paper);border-color:var(--line-strong)}
+  .modal-body{padding:14px 22px 22px}
+  .modal-body .m-detail{font-size:13.5px;color:var(--fog);margin-bottom:14px}
+  .m-block{border-top:1px solid var(--line);padding:13px 0;font-size:14px;color:var(--fog)}
+  .m-block .lbl{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--blue);display:block;margin-bottom:5px}
+  .m-kit-cta{margin-top:12px;display:inline-block;border:0;background:var(--blue);color:var(--paper);border-radius:9px;padding:11px 20px;font-weight:600;font-size:13.5px}
+  .m-kit-cta:hover{filter:brightness(1.12)}
+  .kit-body{display:grid;grid-template-columns:1fr 1fr;border-top:1px solid var(--line);margin-top:12px}
+  @media(max-width:860px){.kit-body{grid-template-columns:1fr}}
+  .kit-editors{display:flex;flex-direction:column;border-right:1px solid var(--line)}
+  @media(max-width:860px){.kit-editors{border-right:0;border-bottom:1px solid var(--line)}}
+  .kit-tabs{display:flex;border-bottom:1px solid var(--line);background:var(--carbon2);align-items:center}
+  .kit-tabs [role=tab]{border:0;background:none;padding:10px 16px;font-family:var(--mono);font-size:10.5px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--steel);border-bottom:2px solid transparent}
+  .kit-tabs [role=tab][aria-selected="true"]{color:var(--paper);border-bottom-color:var(--blue)}
+  .kit-editors textarea{display:none;width:100%;min-height:300px;border:0;resize:vertical;padding:14px 16px;font:12.5px/1.6 var(--mono);background:var(--ink);color:var(--fog);white-space:pre;tab-size:2}
+  .kit-editors textarea:focus{outline:none}
+  .kit-editors textarea.active{display:block}
+  .kit-preview-label{font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.12em;text-transform:uppercase;color:var(--steel);padding:12px 16px;border-bottom:1px solid var(--line);background:var(--carbon2)}
+  .kit-preview iframe{width:100%;height:340px;border:0;display:block;background:#fff}
+  .kit-platform{padding:12px 16px;font-size:12.5px;color:var(--fog);border-top:1px solid var(--line)}
+  .kit-platform b{color:var(--paper);font-weight:600}
+  .confirm-body{padding:16px 22px 22px;font-size:14px;color:var(--fog)}
+  .confirm-actions{display:flex;gap:10px;justify-content:flex-end;padding:0 22px 20px;flex-wrap:wrap}
+  .btn-ghost{border:1px solid var(--line);background:none;color:var(--paper);border-radius:9px;padding:10px 18px;font-weight:500;font-size:13.5px}
+  .btn-ghost:hover{border-color:var(--line-strong)}
+  .btn-danger{border:0;background:var(--rose);color:var(--paper);border-radius:9px;padding:10px 20px;font-weight:600;font-size:13.5px}
+  .btn-danger:hover{filter:brightness(1.1)}
+  .btn-blue{border:0;background:var(--blue);color:var(--paper);border-radius:9px;padding:10px 20px;font-weight:600;font-size:13.5px}
+  .btn-blue:hover{filter:brightness(1.12)}
+  .btn-blue:disabled{background:var(--carbon2);color:var(--steel)}
+
+  footer{border-top:1px solid var(--line);padding:22px 28px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;font-family:var(--mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel)}
+  @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wordmark">
+    <span class="tile" aria-hidden="true"><span></span></span>
+    Lift Audit <span class="ver">/ CRO · V2</span>
+  </div>
+  <div class="head-right">
+    <span class="dot-tag"><i></i>Self-hosted</span>
+    <button id="user-chip" title="Account settings"></button>
+  </div>
+</header>
+
+<!-- ============ AUTH ============ -->
+<div class="auth-wrap" id="auth" style="display:none">
+  <div class="auth-grid-bg" aria-hidden="true"></div>
+  <div class="auth-card">
+    <span class="sect"><i></i><span id="auth-sect">Access</span></span>
+    <h1 id="auth-title">Sign in</h1>
+    <p class="lead" id="auth-lead">Run audits and review your history.</p>
+    <div class="notice err" id="auth-error" role="alert"></div>
+    <div class="notice ok" id="auth-ok" role="status"></div>
+    <form id="auth-form">
+      <div class="field">
+        <label for="auth-email">Email</label>
+        <input id="auth-email" type="email" autocomplete="email" placeholder="you@company.com" required>
+      </div>
+      <div class="field" id="pw-field">
+        <label for="auth-password">Password</label>
+        <input id="auth-password" type="password" autocomplete="current-password" minlength="8" placeholder="••••••••">
+      </div>
+      <button class="btn-primary" type="submit" id="auth-submit">Sign in</button>
+    </form>
+    <div class="auth-links">
+      <button class="linkish" type="button" id="auth-toggle">Create an account</button>
+      <button class="linkish" type="button" id="auth-forgot">Forgot password?</button>
+    </div>
+    <div class="auth-alt" id="auth-alt">
+      <button class="btn-paper" type="button" id="magic-btn">Email me a magic link</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP ============ -->
+<div id="app">
+  <section class="hero" id="hero">
+    <div class="sect">01 / Paste a link</div>
+    <h1>Flat pages, <em>given depth.</em></h1>
+    <p class="sub">Lift Audit loads your page on desktop and mobile, screenshots it, and grades it against the conversion checks that fit your page type.</p>
+    <form class="omnibox" id="audit-form">
+      <input id="url-input" type="text" inputmode="url" autocomplete="url" spellcheck="false" placeholder="https://your-page.com" aria-label="URL to audit">
+      <button type="submit" id="go-btn">Run audit</button>
+    </form>
+    <div class="type-row" id="type-row" role="group" aria-label="Page type">
+      <span class="lbl">Type</span>
+      <button type="button" class="type-chip" data-type="auto" aria-pressed="true">Auto-detect</button>
+      <button type="button" class="type-chip" data-type="product" aria-pressed="false">Product page</button>
+      <button type="button" class="type-chip" data-type="funnel" aria-pressed="false">Funnel / opt-in</button>
+      <button type="button" class="type-chip" data-type="generic" aria-pressed="false">General</button>
+    </div>
+    <p class="hint">Full scan takes 30–60 seconds. Reports save to your history automatically.</p>
+    <div class="error" id="error" role="alert"></div>
+  </section>
+
+  <section class="progress" id="progress" aria-live="polite">
+    <ol>
+      <li><span class="dot"></span>Opening the page in a headless browser</li>
+      <li><span class="dot"></span>Capturing desktop &amp; mobile screenshots</li>
+      <li><span class="dot"></span>Extracting headlines, CTAs, forms &amp; trust signals</li>
+      <li><span class="dot"></span>Grading against the checklist for this page type</li>
+      <li><span class="dot"></span>Writing up the review</li>
+    </ol>
+  </section>
+
+  <section class="history" id="history">
+    <h3>02 / Past audits</h3>
+    <div id="history-list"><p class="hist-empty">No audits yet — your reports will appear here.</p></div>
+  </section>
+
+  <main class="results" id="results">
+    <div class="report-head">
+      <div>
+        <span class="sect">Report · <span id="rev-date"></span></span>
+        <h2 id="rev-url"></h2>
+      </div>
+      <div class="meta" id="rev-meta"></div>
+    </div>
+
+    <div class="grid">
+      <aside class="shot-panel">
+        <div class="device-toggle" id="device-toggle" role="group" aria-label="Screenshot device">
+          <button type="button" data-device="desktop" aria-pressed="true">Desktop</button>
+          <button type="button" data-device="mobile" aria-pressed="false">Mobile</button>
+        </div>
+        <div class="shot-frame">
+          <div class="shot-scroll" id="shot-scroll"></div>
+        </div>
+        <div class="shot-label" id="shot-label"></div>
+      </aside>
+
+      <div>
+        <div class="score-row">
+          <div class="score-circle">
+            <svg viewBox="0 0 140 140" aria-hidden="true">
+              <circle cx="70" cy="70" r="62" fill="none" stroke="var(--carbon2)" stroke-width="6"/>
+              <circle id="score-ring" cx="70" cy="70" r="62" fill="none" stroke="#14B8A6" stroke-width="6" stroke-linecap="round" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/>
+            </svg>
+            <div class="num"><span id="score-num">0</span><small>/100</small></div>
+          </div>
+          <div>
+            <div class="score-note" id="score-note"></div>
+            <p class="verdict" id="score-verdict"></p>
+          </div>
+        </div>
+
+        <div class="cats" id="cats"></div>
+
+        <div class="ai-notes" id="ai-notes" style="display:none">
+          <h3><i></i>Expert notes · AI</h3>
+          <div class="ai-verdict" id="ai-verdict"></div>
+          <ol id="ai-recs"></ol>
+        </div>
+
+        <div class="findings-head">
+          <h3>The checklist</h3>
+          <span class="tally" id="tally"></span>
+          <button type="button" class="copy-btn" id="copy-btn">Copy report</button>
+        </div>
+        <div id="findings"></div>
+
+        <section class="fixkit" id="fixkit" style="display:none">
+          <h3>The Fix Kit</h3>
+          <p class="blurb">Paste-ready sections for the issues above. Open one to edit the HTML/CSS with a live preview, then drop it into Shopify (Custom Liquid), Webflow/Framer (Embed), WordPress (Custom HTML), or your theme.</p>
+          <div class="kit-chips" id="fixkit-cards"></div>
+        </section>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-overlay" id="modal-overlay" role="dialog" aria-modal="true">
+  <div class="modal" id="modal-box"></div>
+</div>
+
+<footer><span>Lift Audit / self-hosted CRO</span><span>Netlify + Supabase</span></footer>
+
+<script src="/config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="/snippets.js"></script>
+<script>
+const $ = (s) => document.querySelector(s);
+const sb = supabase.createClient(window.LIFT_CONFIG.SUPABASE_URL, window.LIFT_CONFIG.SUPABASE_ANON_KEY);
+let currentUser = null, authMode = "signin", selectedType = "auto";
+let lastReport = null, progressTimer = null, pollTimer = null;
+
+/* ================= MODALS ================= */
+const overlay = $("#modal-overlay"), modalBox = $("#modal-box");
+function openModal(html, narrow = false) {
+  modalBox.className = "modal" + (narrow ? " narrow" : "");
+  modalBox.innerHTML = html;
+  overlay.classList.add("open");
+  document.body.style.overflow = "hidden";
+  modalBox.querySelectorAll("[data-close]").forEach(b => b.onclick = closeModal);
+  const first = modalBox.querySelector("input, textarea, button");
+  if (first) first.focus();
+}
+function closeModal() {
+  overlay.classList.remove("open");
+  modalBox.innerHTML = "";
+  document.body.style.overflow = "";
+}
+overlay.addEventListener("click", (e) => { if (e.target === overlay) closeModal(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && overlay.classList.contains("open")) closeModal(); });
+
+/* ================= AUTH LAYER ================= */
+const MODES = {
+  signin:  { sect:"Access",   title:"Sign in",             lead:"Run audits and review your history.",                       submit:"Sign in",           pw:true,  toggle:"Create an account",       forgot:true,  magic:true  },
+  signup:  { sect:"Access",   title:"Create your account", lead:"Accounts and reports live in your own Supabase project.",   submit:"Create account",    pw:true,  toggle:"Have an account? Sign in", forgot:false, magic:false },
+  forgot:  { sect:"Recovery", title:"Reset your password", lead:"We'll email you a secure link to set a new password.",      submit:"Send reset link",   pw:false, toggle:"Back to sign in",          forgot:false, magic:false },
+  recovery:{ sect:"Recovery", title:"Set a new password",  lead:"You followed a reset link — choose your new password.",     submit:"Update password",   pw:true,  toggle:null,                       forgot:false, magic:false },
+};
+function setAuthMode(mode) {
+  authMode = mode;
+  const m = MODES[mode];
+  $("#auth-sect").textContent = m.sect;
+  $("#auth-title").textContent = m.title;
+  $("#auth-lead").textContent = m.lead;
+  $("#auth-submit").textContent = m.submit;
+  $("#pw-field").style.display = m.pw ? "block" : "none";
+  $("#auth-password").required = m.pw;
+  $("#auth-password").autocomplete = mode === "signin" ? "current-password" : "new-password";
+  $("#auth-password").parentElement.querySelector("label").textContent = mode === "recovery" ? "New password" : "Password";
+  $("#auth-email").parentElement.style.display = mode === "recovery" ? "none" : "block";
+  $("#auth-email").required = mode !== "recovery";
+  $("#auth-toggle").style.display = m.toggle ? "inline" : "none";
+  if (m.toggle) $("#auth-toggle").textContent = m.toggle;
+  $("#auth-forgot").style.display = m.forgot ? "inline" : "none";
+  $("#auth-alt").style.display = m.magic ? "block" : "none";
+  hideAuthMsgs();
+}
+function authErr(msg){ $("#auth-error").textContent = msg; $("#auth-error").style.display = "block"; $("#auth-ok").style.display = "none"; }
+function authOk(msg){ $("#auth-ok").textContent = msg; $("#auth-ok").style.display = "block"; $("#auth-error").style.display = "none"; }
+function hideAuthMsgs(){ $("#auth-error").style.display = "none"; $("#auth-ok").style.display = "none"; }
+
+$("#auth-toggle").onclick = () => setAuthMode(authMode === "signup" ? "signin" : authMode === "signin" ? "signup" : "signin");
+$("#auth-forgot").onclick = () => setAuthMode("forgot");
+
+$("#magic-btn").onclick = async () => {
+  const email = $("#auth-email").value.trim();
+  if (!email) { authErr("Enter your email first, then tap the magic link button."); return; }
+  const btn = $("#magic-btn");
+  btn.disabled = true;
+  const { error } = await sb.auth.signInWithOtp({ email, options: { emailRedirectTo: location.origin } });
+  btn.disabled = false;
+  if (error) authErr(error.message);
+  else authOk("Magic link sent — check your inbox and open it on this device.");
+};
+
+$("#auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("#auth-submit");
+  btn.disabled = true;
+  hideAuthMsgs();
+  const email = $("#auth-email").value.trim(), password = $("#auth-password").value;
+  try {
+    if (authMode === "signup") {
+      const { data, error } = await sb.auth.signUp({ email, password });
+      if (error) throw error;
+      if (!data.session) {
+        authOk("Check your inbox — confirm your email, then sign in.");
+        setAuthMode("signin");
+        return;
+      }
+      enterApp(data.user);
+    } else if (authMode === "signin") {
+      const { data, error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      enterApp(data.user);
+    } else if (authMode === "forgot") {
+      const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin });
+      if (error) throw error;
+      authOk("Reset link sent — check your inbox.");
+    } else if (authMode === "recovery") {
+      const { data, error } = await sb.auth.updateUser({ password });
+      if (error) throw error;
+      authOk("Password updated.");
+      setTimeout(() => enterApp(data.user), 600);
+    }
+  } catch (err) {
+    authErr(err.message || "Something went wrong.");
+  } finally { btn.disabled = false; }
+});
+
+sb.auth.onAuthStateChange((event, session) => {
+  if (event === "PASSWORD_RECOVERY") {
+    $("#app").style.display = "none";
+    $("#auth").style.display = "grid";
+    setAuthMode("recovery");
+  }
+});
+
+async function boot() {
+  if (location.hash.includes("type=recovery")) { $("#auth").style.display = "grid"; setAuthMode("recovery"); return; }
+  const { data } = await sb.auth.getSession();
+  if (data.session) { enterApp(data.session.user); return; }
+  $("#auth").style.display = "grid";
+}
+
+function enterApp(user) {
+  currentUser = user;
+  $("#auth").style.display = "none";
+  $("#app").style.display = "block";
+  const chip = $("#user-chip");
+  chip.style.display = "inline-flex";
+  chip.textContent = user.email;
+  chip.onclick = openAccountModal;
+  loadHistory();
+}
+
+function openAccountModal() {
+  openModal(`
+    <div class="modal-head">
+      <h3>Account</h3>
+      <button class="modal-close" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="m-detail">Signed in as <b style="color:var(--paper)">${esc(currentUser.email)}</b></p>
+      <div class="m-block">
+        <span class="lbl">Change password</span>
+        <div class="field" style="margin:8px 0 10px"><input id="new-pw" type="password" minlength="8" placeholder="New password (8+ characters)" autocomplete="new-password"></div>
+        <button class="btn-blue" id="save-pw">Update password</button>
+        <span id="pw-msg" style="margin-left:12px;font-size:13px"></span>
+      </div>
+      <div class="m-block" style="border-bottom:0;padding-bottom:4px">
+        <span class="lbl">Session</span>
+        <button class="btn-ghost" id="signout-btn" style="margin-top:8px">Sign out</button>
+      </div>
+    </div>`, true);
+  $("#save-pw").onclick = async () => {
+    const pw = $("#new-pw").value;
+    const msg = $("#pw-msg");
+    if (pw.length < 8) { msg.textContent = "8 characters minimum."; msg.style.color = "var(--rose)"; return; }
+    const { error } = await sb.auth.updateUser({ password: pw });
+    msg.textContent = error ? error.message : "Password updated.";
+    msg.style.color = error ? "var(--rose)" : "var(--teal)";
+    if (!error) $("#new-pw").value = "";
+  };
+  $("#signout-btn").onclick = async () => { await sb.auth.signOut(); location.href = location.pathname; };
+}
+
+/* ================= PAGE TYPE ================= */
+document.querySelectorAll(".type-chip").forEach(chip => {
+  chip.onclick = () => {
+    document.querySelectorAll(".type-chip").forEach(c => c.setAttribute("aria-pressed", "false"));
+    chip.setAttribute("aria-pressed", "true");
+    selectedType = chip.dataset.type;
+  };
+});
+
+/* ================= HISTORY ================= */
+async function loadHistory() {
+  const { data: reports, error } = await sb
+    .from("reports")
+    .select("id,url,score,detected_type,status,created_at,data")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) return;
+  const list = $("#history-list");
+  const done = (reports || []).filter(r => r.status === "complete");
+  if (!done.length) {
+    list.innerHTML = '<p class="hist-empty">No audits yet — your reports will appear here.</p>';
+    return;
+  }
+  list.innerHTML = "";
+  done.forEach(r => {
+    const fails = r.data?.findings?.filter(f => f.status === "fail").length ?? 0;
+    const warns = r.data?.findings?.filter(f => f.status === "warn").length ?? 0;
+    const row = document.createElement("div");
+    row.className = "hist-row";
+    const cls = r.score >= 80 ? "good" : r.score >= 55 ? "mid" : "bad";
+    const btn = document.createElement("button");
+    btn.className = "hist-item";
+    btn.innerHTML = `
+      <span class="hist-score ${cls}">${r.score}</span>
+      <span class="hist-url">${esc(String(r.url).replace(/^https?:\/\//,""))}</span>
+      <span class="hist-meta">${esc(typeLabel(r.detected_type).toUpperCase())} · ${fails}F/${warns}W · ${new Date(r.created_at).toLocaleDateString()}</span>`;
+    btn.onclick = () => openReport(r.id);
+    const del = document.createElement("button");
+    del.className = "hist-del";
+    del.title = "Delete report";
+    del.textContent = "✕";
+    del.onclick = (ev) => { ev.stopPropagation(); confirmDelete(r); };
+    row.appendChild(btn); row.appendChild(del);
+    list.appendChild(row);
+  });
+}
+function typeLabel(t){ return { product:"Product", funnel:"Funnel", generic:"General" }[t] || "General"; }
+
+function confirmDelete(r) {
+  openModal(`
+    <div class="modal-head">
+      <h3>Delete this report?</h3>
+      <button class="modal-close" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="confirm-body">
+      <b style="color:var(--paper)">${esc(String(r.url).replace(/^https?:\/\//,""))}</b> — scored ${r.score}. This removes the report and its screenshots permanently.
+    </div>
+    <div class="confirm-actions">
+      <button class="btn-ghost" data-close>Keep it</button>
+      <button class="btn-danger" id="confirm-del-btn">Delete report</button>
+    </div>`, true);
+  $("#confirm-del-btn").onclick = async () => {
+    await sb.storage.from("screenshots").remove([
+      `${currentUser.id}/${r.id}-desktop.jpg`,
+      `${currentUser.id}/${r.id}-mobile.jpg`,
+    ]);
+    await sb.from("reports").delete().eq("id", r.id);
+    closeModal();
+    loadHistory();
+  };
+}
+
+async function openReport(id) {
+  const { data: row, error } = await sb.from("reports").select("*").eq("id", id).single();
+  if (error || !row || row.status !== "complete") return;
+  render(await hydrate(row));
+}
+
+async function hydrate(row) {
+  const shots = { desktopFull: null, mobileFull: null };
+  const paths = [row.desktop_shot, row.mobile_shot].filter(Boolean);
+  if (paths.length) {
+    const { data: signed } = await sb.storage.from("screenshots").createSignedUrls(paths, 3600);
+    (signed || []).forEach(s => {
+      if (!s.signedUrl) return;
+      if (s.path === row.desktop_shot) shots.desktopFull = s.signedUrl;
+      if (s.path === row.mobile_shot) shots.mobileFull = s.signedUrl;
+    });
+  }
+  return { ...row.data, id: row.id, screenshots: shots };
+}
+
+/* ================= AUDIT ================= */
+$("#audit-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const url = $("#url-input").value.trim();
+  if (!url) { showError("Paste a URL first."); return; }
+  hideError();
+  $("#results").style.display = "none";
+  $("#progress").style.display = "block";
+  const goBtn = $("#go-btn");
+  goBtn.disabled = true; goBtn.textContent = "Auditing…";
+  startProgress();
+  try {
+    const { data: row, error: insErr } = await sb
+      .from("reports")
+      .insert({ user_id: currentUser.id, url, page_type: selectedType, status: "pending" })
+      .select("id")
+      .single();
+    if (insErr) throw new Error(insErr.message);
+
+    const { data: sess } = await sb.auth.getSession();
+    const res = await fetch("/.netlify/functions/audit-background", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${sess.session.access_token}`,
+      },
+      body: JSON.stringify({ reportId: row.id }),
+    });
+    if (res.status >= 400) throw new Error("Couldn't start the audit (check function logs).");
+
+    await pollReport(row.id);
+  } catch (err) {
+    stopProgress(); stopPoll();
+    $("#progress").style.display = "none";
+    showError(err.message);
+    finishAuditUi();
+  }
+});
+
+function pollReport(id) {
+  return new Promise((resolve) => {
+    const started = Date.now();
+    pollTimer = setInterval(async () => {
+      if (Date.now() - started > 5 * 60 * 1000) {
+        stopPoll(); stopProgress();
+        $("#progress").style.display = "none";
+        showError("The audit timed out. Very heavy pages can exceed the function budget — try again or check the Netlify function logs.");
+        finishAuditUi(); resolve();
+        return;
+      }
+      const { data: row } = await sb.from("reports").select("*").eq("id", id).single();
+      if (!row) return;
+      if (row.status === "complete") {
+        stopPoll(); finishProgress();
+        const report = await hydrate(row);
+        setTimeout(() => { $("#progress").style.display = "none"; render(report); loadHistory(); }, 350);
+        finishAuditUi(); resolve();
+      } else if (row.status === "error") {
+        stopPoll(); stopProgress();
+        $("#progress").style.display = "none";
+        showError(row.error || "The audit failed.");
+        finishAuditUi(); resolve();
+      }
+    }, 3000);
+  });
+}
+function finishAuditUi(){ const b = $("#go-btn"); b.disabled = false; b.textContent = "Run audit"; }
+function stopPoll(){ if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+function showError(msg){ $("#error").textContent = msg; $("#error").style.display = "block"; }
+function hideError(){ $("#error").style.display = "none"; }
+
+function startProgress(){
+  const items = document.querySelectorAll("#progress li");
+  items.forEach(li => { li.classList.remove("active","done"); li.querySelector(".dot").textContent = ""; });
+  let step = 0;
+  items[0].classList.add("active");
+  progressTimer = setInterval(() => {
+    if (step < items.length - 1) {
+      items[step].classList.replace("active","done");
+      items[step].querySelector(".dot").textContent = "✓";
+      step++;
+      items[step].classList.add("active");
+    }
+  }, 7000);
+}
+function finishProgress(){
+  stopProgress();
+  document.querySelectorAll("#progress li").forEach(li => {
+    li.classList.remove("active"); li.classList.add("done");
+    li.querySelector(".dot").textContent = "✓";
+  });
+}
+function stopProgress(){ if (progressTimer) clearInterval(progressTimer); progressTimer = null; }
+
+/* ================= RENDER ================= */
+function scoreWords(s){
+  if (s >= 85) return ["Strong", "var(--teal)", "This page is in strong shape — polish the warnings and keep testing."];
+  if (s >= 70) return ["Solid · fixable", "var(--teal)", "Good bones. A handful of targeted fixes should produce measurable lift."];
+  if (s >= 50) return ["Needs work", "var(--amber)", "Several conversion leaks found. Work the failures top-down — they're ordered by impact."];
+  return ["Big opportunity", "var(--rose)", "Substantial issues are likely costing conversions right now. The good news: the fixes below are concrete."];
+}
+
+function render(data){
+  lastReport = data;
+  $("#results").style.display = "block";
+
+  $("#rev-date").textContent = new Date(data.scannedAt).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+  $("#rev-url").innerHTML = esc(data.finalUrl.replace(/^https?:\/\//,"").replace(/\/$/,"")) +
+    `<span class="type-badge"><i></i>${esc(typeLabel(data.pageType))}${data.requestedType === "auto" ? " · auto" : ""}</span>`;
+
+  const p = data.page;
+  const meta = [];
+  if (p.loadMs) meta.push(`<b>${(p.loadMs/1000).toFixed(1)}S</b> LOAD`);
+  if (p.pageBytes) meta.push(`<b>${(p.pageBytes/1048576).toFixed(1)}MB</b>`);
+  if (p.requestCount) meta.push(`<b>${p.requestCount}</b> REQ`);
+  meta.push(`<b>${p.wordCount}</b> WORDS`);
+  if (data.mode === "lite") meta.push(`HTML-ONLY`);
+  $("#rev-meta").innerHTML = meta.join(" &nbsp;·&nbsp; ");
+
+  const shots = data.screenshots || {};
+  const scroll = $("#shot-scroll"), label = $("#shot-label");
+  function showDevice(device){
+    const src = device === "mobile" ? shots.mobileFull : shots.desktopFull;
+    if (src) {
+      scroll.innerHTML = `<img alt="Full-page ${device} screenshot" src="${src}">`;
+      label.textContent = device === "mobile" ? "Full page · 390px iPhone view" : "Full page · 1440px desktop view";
+    }
+  }
+  if (shots.desktopFull) {
+    $("#device-toggle").style.display = shots.mobileFull ? "flex" : "none";
+    document.querySelectorAll("#device-toggle button").forEach(btn => {
+      btn.setAttribute("aria-pressed", String(btn.dataset.device === "desktop"));
+      btn.onclick = () => {
+        document.querySelectorAll("#device-toggle button").forEach(b => b.setAttribute("aria-pressed","false"));
+        btn.setAttribute("aria-pressed","true");
+        showDevice(btn.dataset.device);
+      };
+    });
+    showDevice("desktop");
+  } else {
+    $("#device-toggle").style.display = "none";
+    scroll.innerHTML = `<div class="shot-none">No screenshot — this scan ran in HTML-only mode (the headless browser couldn't start). Most checks still ran.</div>`;
+    label.textContent = "";
+  }
+
+  const [note, noteColor, verdict] = scoreWords(data.score);
+  $("#score-note").innerHTML = `<i style="background:${noteColor}"></i><span style="color:${noteColor}">${note}</span>`;
+  $("#score-verdict").innerHTML = `<b>${data.findings.filter(f=>f.status==="fail").length} failures, ${data.findings.filter(f=>f.status==="warn").length} warnings.</b> ${verdict}`;
+  animateScore(data.score);
+
+  const cats = $("#cats"); cats.innerHTML = "";
+  Object.values(data.categories).forEach(c => {
+    const cls = c.score >= 80 ? "" : c.score >= 55 ? "mid" : "low";
+    const row = document.createElement("div");
+    row.className = "cat " + cls;
+    row.innerHTML = `<span class="name">${esc(c.label)}</span><span class="bar"><i style="width:0%"></i></span><span class="val">${c.score}</span>`;
+    cats.appendChild(row);
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{ row.querySelector("i").style.width = c.score + "%"; }));
+  });
+
+  const aiBox = $("#ai-notes");
+  if (data.ai && data.ai.recommendations) {
+    aiBox.style.display = "block";
+    $("#ai-verdict").textContent = data.ai.verdict || "";
+    $("#ai-recs").innerHTML = data.ai.recommendations.map((r,i) =>
+      `<li><span class="n">${String(i+1).padStart(2,"0")}</span><div><b>${esc(r.title)}</b>${esc(r.note)}</div></li>`).join("");
+  } else aiBox.style.display = "none";
+
+  const counts = { pass:0, warn:0, fail:0 };
+  data.findings.forEach(f => counts[f.status]++);
+  $("#tally").innerHTML = `<b class="f">${counts.fail} FAIL</b> · <b class="w">${counts.warn} WARN</b> · <b class="p">${counts.pass} PASS</b>`;
+
+  const wrap = $("#findings"); wrap.innerHTML = "";
+  data.findings.forEach((f, i) => {
+    const el = document.createElement("div");
+    el.className = "finding " + f.status;
+    el.style.animationDelay = Math.min(i * 50, 800) + "ms";
+    const firstFail = f.status === "fail" && !wrap.querySelector(".fail");
+    const hasKit = f.snippet && window.FIX_KIT[f.snippet] && f.status !== "pass";
+    el.innerHTML = `
+      ${firstFail ? '<span class="fix-first"><i></i>Fix this first</span>' : ""}
+      <div class="top">
+        <span class="status ${f.status}"><i></i>${f.status}</span>
+        <span class="title">${esc(f.title)}</span>
+        <span class="cat-tag">${esc(f.categoryLabel)}${f.surface==="mobile" ? " · MOBILE" : ""}</span>
+      </div>
+      <div class="detail">${esc(f.detail)}</div>
+      ${f.status !== "pass" ? `
+        <div class="actions">
+          <button type="button" class="link-blue f-detail">Why &amp; how to fix</button>
+          ${hasKit ? `<button type="button" class="link-blue f-kit">Get the code</button>` : ""}
+        </div>` : ""}
+    `;
+    const d = el.querySelector(".f-detail");
+    if (d) d.onclick = () => openFindingModal(f);
+    const k = el.querySelector(".f-kit");
+    if (k) k.onclick = () => openKitModal(f.snippet, f);
+    wrap.appendChild(el);
+  });
+
+  const needed = [...new Set(
+    data.findings.filter(f => f.status !== "pass" && f.snippet && window.FIX_KIT[f.snippet]).map(f => f.snippet)
+  )];
+  const kitWrap = $("#fixkit"), chips = $("#fixkit-cards");
+  chips.innerHTML = "";
+  if (needed.length) {
+    kitWrap.style.display = "block";
+    needed.forEach(key => {
+      const snip = window.FIX_KIT[key];
+      const rel = data.findings.find(f => f.snippet === key && f.status !== "pass");
+      const chip = document.createElement("button");
+      chip.className = "kit-chip";
+      chip.innerHTML = `<b>${esc(snip.name)}</b><span>Fixes: ${esc(rel ? rel.title : "")}</span>`;
+      chip.onclick = () => openKitModal(key, rel);
+      chips.appendChild(chip);
+    });
+  } else kitWrap.style.display = "none";
+
+  $("#copy-btn").onclick = () => {
+    navigator.clipboard.writeText(toMarkdown(data)).then(() => {
+      $("#copy-btn").textContent = "Copied ✓";
+      setTimeout(()=> $("#copy-btn").textContent = "Copy report", 1600);
+    });
+  };
+
+  $("#results").scrollIntoView({ behavior: "smooth" });
+}
+
+/* ================= FINDING MODAL ================= */
+function openFindingModal(f) {
+  const hasKit = f.snippet && window.FIX_KIT[f.snippet];
+  openModal(`
+    <div class="modal-head">
+      <span class="status ${f.status}" style="margin-top:5px"><i></i>${f.status}</span>
+      <h3>${esc(f.title)}</h3>
+      <button class="modal-close" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="m-detail">${esc(f.detail)} <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--steel)"> · ${esc(f.categoryLabel)}${f.surface==="mobile" ? " · mobile" : ""}</span></p>
+      <div class="m-block"><span class="lbl">Why it matters</span>${esc(f.why)}</div>
+      <div class="m-block"><span class="lbl">The fix</span>${esc(f.fix)}</div>
+      ${hasKit ? `<button class="m-kit-cta" id="m-open-kit">Open the code →</button>` : ""}
+    </div>`, true);
+  if (hasKit) $("#m-open-kit").onclick = () => openKitModal(f.snippet, f);
+}
+
+/* ================= FIX KIT MODAL ================= */
+function openKitModal(key, finding) {
+  const snip = window.FIX_KIT[key];
+  if (!snip) return;
+  openModal(`
+    <div class="modal-head">
+      <h3>${esc(snip.name)}</h3>
+      <button class="modal-close" data-close aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body" style="padding-bottom:0">
+      <p class="m-detail">${esc(snip.blurb)}${finding ? ` <span style="font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--blue)"> · Fixes: ${esc(finding.title)}</span>` : ""}</p>
+    </div>
+    <div class="kit-body">
+      <div class="kit-editors">
+        <div class="kit-tabs" role="tablist">
+          <button role="tab" aria-selected="true" data-tab="html">HTML</button>
+          <button role="tab" aria-selected="false" data-tab="css">CSS</button>
+          <button class="link-blue kit-copy" data-what="html" style="margin-left:auto;padding:10px 10px;font-size:12px">Copy HTML</button>
+          <button class="link-blue kit-copy" data-what="css" style="padding:10px 10px;font-size:12px">Copy CSS</button>
+          <button class="link-blue kit-copy" data-what="both" style="padding:10px 14px 10px 4px;font-size:12px">Copy both</button>
+        </div>
+        <textarea class="active" data-editor="html" spellcheck="false" aria-label="HTML editor"></textarea>
+        <textarea data-editor="css" spellcheck="false" aria-label="CSS editor"></textarea>
+      </div>
+      <div class="kit-preview">
+        <div class="kit-preview-label">Live preview · renders on white, like your site</div>
+        <iframe title="Snippet preview" sandbox="allow-same-origin"></iframe>
+      </div>
+    </div>
+    <div class="kit-platform"><b>Where to paste:</b> ${esc(snip.platform)}</div>
+  `);
+
+  const htmlTa = modalBox.querySelector('[data-editor="html"]');
+  const cssTa = modalBox.querySelector('[data-editor="css"]');
+  const iframe = modalBox.querySelector("iframe");
+  htmlTa.value = snip.html;
+  cssTa.value = snip.css;
+
+  function refresh(){
+    iframe.srcdoc = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;font-family:system-ui,-apple-system,sans-serif;background:#fff;padding:12px}${cssTa.value}</style></head><body>${htmlTa.value}</body></html>`;
+  }
+  let debounce;
+  [htmlTa, cssTa].forEach(ta => ta.addEventListener("input", () => {
+    clearTimeout(debounce); debounce = setTimeout(refresh, 250);
+  }));
+  refresh();
+
+  modalBox.querySelectorAll('[role="tab"]').forEach(tab => {
+    tab.onclick = () => {
+      modalBox.querySelectorAll('[role="tab"]').forEach(t => t.setAttribute("aria-selected","false"));
+      tab.setAttribute("aria-selected","true");
+      htmlTa.classList.toggle("active", tab.dataset.tab === "html");
+      cssTa.classList.toggle("active", tab.dataset.tab === "css");
+    };
+  });
+  modalBox.querySelectorAll(".kit-copy").forEach(btn => {
+    btn.onclick = () => {
+      const what = btn.dataset.what;
+      const text = what === "html" ? htmlTa.value
+        : what === "css" ? cssTa.value
+        : `<style>\n${cssTa.value}\n</style>\n\n${htmlTa.value}`;
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = "Copied ✓";
+        setTimeout(() => btn.textContent = orig, 1400);
+      });
+    };
+  });
+}
+
+/* ================= MISC ================= */
+function animateScore(target){
+  const el = $("#score-num"), ring = $("#score-ring");
+  ring.style.stroke = target >= 80 ? "var(--teal)" : target >= 55 ? "var(--amber)" : "var(--rose)";
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduced) { el.textContent = target; ring.style.strokeDashoffset = String(100 - target); return; }
+  const start = performance.now(), dur = 1100;
+  function tick(now){
+    const t = Math.min(1, (now - start) / dur);
+    const eased = 1 - Math.pow(1 - t, 3);
+    el.textContent = Math.round(target * eased);
+    ring.style.strokeDashoffset = String(100 - target * eased);
+    if (t < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+}
+
+function esc(s){ const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+
+function toMarkdown(d){
+  let md = `# CRO Audit — ${d.finalUrl}\n\nScore: **${d.score}/100** · Page type: ${typeLabel(d.pageType)} · Scanned ${new Date(d.scannedAt).toLocaleString()}\n\n`;
+  if (d.ai?.recommendations){
+    md += `## Expert notes\n> ${d.ai.verdict}\n\n`;
+    d.ai.recommendations.forEach(r => md += `${r.priority}. **${r.title}** — ${r.note}\n`);
+    md += "\n";
+  }
+  md += `## Findings\n`;
+  d.findings.forEach(f => {
+    md += `\n### [${f.status.toUpperCase()}] ${f.title} (${f.categoryLabel})\n${f.detail}\n`;
+    if (f.status !== "pass") md += `- Why: ${f.why}\n- Fix: ${f.fix}\n`;
+  });
+  return md;
+}
+
+setAuthMode("signin");
+boot();
+</script>
+</body>
+</html>
